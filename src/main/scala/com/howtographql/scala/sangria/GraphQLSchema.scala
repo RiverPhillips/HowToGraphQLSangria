@@ -3,9 +3,9 @@ package com.howtographql.scala.sangria
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 
-import com.howtographql.scala.sangria.models.{Link, LocalDateTimeCoerceViolation}
+import com.howtographql.scala.sangria.models.{Link, LocalDateTimeCoerceViolation, User, Vote, Identifiable}
 import sangria.ast.StringValue
-import sangria.execution.deferred.{DeferredResolver, Fetcher, HasId}
+import sangria.execution.deferred.{DeferredResolver, Fetcher}
 import sangria.macros.derive._
 import sangria.schema.{Field, IntType, ObjectType, _}
 
@@ -30,18 +30,41 @@ object GraphQLSchema {
     }
   )
 
+  val IdentifiableType = InterfaceType(
+    "Identifiable",
+    fields[Unit, Identifiable](
+      Field("id", IntType, resolve = _.value.id)
+    )
+  )
+
   implicit val LinkType = deriveObjectType[Unit, Link](
+    Interfaces(IdentifiableType),
     ReplaceField("createdAt", Field("createdAt", GraphQLDateTime, resolve = _.value.createdAt))
   )
-  implicit val linkHasId = HasId[Link, Int](_.id)
 
+  implicit val UserType = deriveObjectType[Unit, User](
+    Interfaces(IdentifiableType),
+    ReplaceField("createdAt", Field("createdAt", GraphQLDateTime, resolve = _.value.createdAt))
+  )
 
+  implicit val VoteType = deriveObjectType[Unit, Vote](
+    Interfaces(IdentifiableType),
+    ReplaceField("createdAt", Field("createdAt", GraphQLDateTime, resolve = _.value.createdAt))
+  )
 
   val linksFetcher = Fetcher(
     (ctx: Context, ids: Seq[Int]) => ctx.dao.getLinks(ids)
   )
 
-  val Resolver = DeferredResolver.fetchers(linksFetcher)
+  val userFetcher = Fetcher(
+    (ctx: Context, ids: Seq[Int]) => ctx.dao.getUsers(ids)
+  )
+
+  val voteFetcher = Fetcher(
+    (ctx: Context, ids: Seq[Int]) => ctx.dao.getVotes(ids)
+  )
+
+  val Resolver = DeferredResolver.fetchers(linksFetcher, userFetcher, voteFetcher)
 
 
   val Id = Argument("id", IntType)
@@ -62,6 +85,32 @@ object GraphQLSchema {
         ListType(LinkType),
         arguments = Ids :: Nil,
         resolve = c => linksFetcher.deferSeq(c.arg(Ids))
+      ),
+      Field("allUsers", ListType(UserType), resolve = c => c.ctx.dao.allUsers),
+      Field(
+        "user",
+        OptionType(UserType),
+        arguments = Id :: Nil,
+        resolve = c => userFetcher.deferOpt(c.arg(Id))
+      ),
+      Field(
+        "users",
+        ListType(UserType),
+        arguments = Ids :: Nil,
+        resolve = c => userFetcher.deferSeq(c.arg(Ids))
+      ),
+      Field("allVotes", ListType(VoteType), resolve = c => c.ctx.dao.allVotes),
+      Field(
+        "vote",
+        OptionType(VoteType),
+        arguments = Id :: Nil,
+        resolve = c => voteFetcher.deferOpt(c.arg(Id))
+      ),
+      Field(
+        "votes",
+        ListType(VoteType),
+        arguments = Ids :: Nil,
+        resolve = c => voteFetcher.deferSeq(c.arg(Ids))
       )
     )
   )
