@@ -15,7 +15,7 @@ package object models {
     implicit def hasId[T <: Identifiable]: HasId[T, Int] = HasId(_.id)
   }
 
-  case class Link(id: Int, url: String, description: String, createdAt: LocalDateTime = LocalDateTime.now) extends Identifiable
+  case class Link(id: Int, url: String, description: String, postedBy: Int, createdAt: LocalDateTime = LocalDateTime.now) extends Identifiable
 
   case class User(id: Int, name: String, email: String, password: String, createdAt: LocalDateTime = LocalDateTime.now) extends Identifiable
 

@@ -3,9 +3,9 @@ package com.howtographql.scala.sangria
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 
-import com.howtographql.scala.sangria.models.{Link, LocalDateTimeCoerceViolation, User, Vote, Identifiable}
+import com.howtographql.scala.sangria.models.{Identifiable, Link, LocalDateTimeCoerceViolation, User, Vote}
 import sangria.ast.StringValue
-import sangria.execution.deferred.{DeferredResolver, Fetcher}
+import sangria.execution.deferred.{DeferredResolver, Fetcher, Relation, RelationIds}
 import sangria.macros.derive._
 import sangria.schema.{Field, IntType, ObjectType, _}
 
@@ -37,34 +37,43 @@ object GraphQLSchema {
     )
   )
 
-  implicit val LinkType = deriveObjectType[Unit, Link](
+  lazy val LinkType : ObjectType[Unit, Link] = deriveObjectType[Unit, Link](
+    Interfaces(IdentifiableType),
+    ReplaceField("createdAt", Field("createdAt", GraphQLDateTime, resolve = _.value.createdAt)),
+    ReplaceField("postedBy",
+      Field("postedBy", UserType, resolve = c => usersFetcher.defer(c.value.postedBy))
+    )
+  )
+
+  lazy val UserType: ObjectType[Unit, User] = deriveObjectType[Unit, User](
+    Interfaces(IdentifiableType),
+    ReplaceField("createdAt", Field("createdAt", GraphQLDateTime, resolve = _.value.createdAt)),
+    AddFields(
+      Field("links", ListType(LinkType), resolve = c => linksFetcher.deferRelSeq(linkByUserRel, c.value.id))
+    )
+  )
+
+  val VoteType: ObjectType[Unit, Vote] = deriveObjectType[Unit, Vote](
     Interfaces(IdentifiableType),
     ReplaceField("createdAt", Field("createdAt", GraphQLDateTime, resolve = _.value.createdAt))
   )
 
-  implicit val UserType = deriveObjectType[Unit, User](
-    Interfaces(IdentifiableType),
-    ReplaceField("createdAt", Field("createdAt", GraphQLDateTime, resolve = _.value.createdAt))
+  val linkByUserRel = Relation[Link, Int]("byUser", l => Seq(l.postedBy))
+
+  val linksFetcher = Fetcher.rel(
+    (ctx: Context, ids: Seq[Int]) => ctx.dao.getLinks(ids),
+    (ctx: Context, ids: RelationIds[Link]) => ctx.dao.getLinksByUserIds(ids(linkByUserRel))
   )
 
-  implicit val VoteType = deriveObjectType[Unit, Vote](
-    Interfaces(IdentifiableType),
-    ReplaceField("createdAt", Field("createdAt", GraphQLDateTime, resolve = _.value.createdAt))
-  )
-
-  val linksFetcher = Fetcher(
-    (ctx: Context, ids: Seq[Int]) => ctx.dao.getLinks(ids)
-  )
-
-  val userFetcher = Fetcher(
+  val usersFetcher = Fetcher(
     (ctx: Context, ids: Seq[Int]) => ctx.dao.getUsers(ids)
   )
 
-  val voteFetcher = Fetcher(
+  val votesFetcher = Fetcher(
     (ctx: Context, ids: Seq[Int]) => ctx.dao.getVotes(ids)
   )
 
-  val Resolver = DeferredResolver.fetchers(linksFetcher, userFetcher, voteFetcher)
+  val Resolver = DeferredResolver.fetchers(linksFetcher, usersFetcher, votesFetcher)
 
 
   val Id = Argument("id", IntType)
@@ -91,26 +100,26 @@ object GraphQLSchema {
         "user",
         OptionType(UserType),
         arguments = Id :: Nil,
-        resolve = c => userFetcher.deferOpt(c.arg(Id))
+        resolve = c => usersFetcher.deferOpt(c.arg(Id))
       ),
       Field(
         "users",
         ListType(UserType),
         arguments = Ids :: Nil,
-        resolve = c => userFetcher.deferSeq(c.arg(Ids))
+        resolve = c => usersFetcher.deferSeq(c.arg(Ids))
       ),
       Field("allVotes", ListType(VoteType), resolve = c => c.ctx.dao.allVotes),
       Field(
         "vote",
         OptionType(VoteType),
         arguments = Id :: Nil,
-        resolve = c => voteFetcher.deferOpt(c.arg(Id))
+        resolve = c => votesFetcher.deferOpt(c.arg(Id))
       ),
       Field(
         "votes",
         ListType(VoteType),
         arguments = Ids :: Nil,
-        resolve = c => voteFetcher.deferSeq(c.arg(Ids))
+        resolve = c => votesFetcher.deferSeq(c.arg(Ids))
       )
     )
   )
