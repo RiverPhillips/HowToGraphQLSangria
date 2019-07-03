@@ -2,11 +2,24 @@ package com.howtographql.scala.sangria
 
 import com.howtographql.scala.sangria.DBSchema._
 import com.howtographql.scala.sangria.models.{Link, User, Vote}
+import sangria.execution.deferred.{RelationIds, SimpleRelation}
 import slick.jdbc.H2Profile.api._
 
 import scala.concurrent.Future
 
 class DAO(db: Database) {
+  def getVotesByRelationsId(rel: RelationIds[Vote]): Future[Seq[Vote]] = {
+    db.run(
+      Votes.filter { vote =>
+        rel.rawIds.collect({
+          case (SimpleRelation("byUser"), ids: Seq[Int]) => vote.userId inSet ids
+          case (SimpleRelation("byLink"), ids: Seq[Int]) => vote.linkId inSet ids
+        }).foldLeft(true: Rep[Boolean])(_ || _)
+      }.result
+    )
+  }
+
+
   def allVotes: Future[Seq[Vote]] = db.run(Votes.result)
 
   def getVotes(ids: Seq[Int]): Future[Seq[Vote]] = db.run(

@@ -6,6 +6,7 @@ import java.time.format.DateTimeFormatter
 import com.howtographql.scala.sangria.models.{Identifiable, Link, LocalDateTimeCoerceViolation, User, Vote}
 import sangria.ast.StringValue
 import sangria.execution.deferred.{DeferredResolver, Fetcher, Relation, RelationIds}
+import sangria.macros.derive
 import sangria.macros.derive._
 import sangria.schema.{Field, IntType, ObjectType, _}
 
@@ -42,6 +43,9 @@ object GraphQLSchema {
     ReplaceField("createdAt", Field("createdAt", GraphQLDateTime, resolve = _.value.createdAt)),
     ReplaceField("postedBy",
       Field("postedBy", UserType, resolve = c => usersFetcher.defer(c.value.postedBy))
+    ),
+    AddFields(
+      Field("votes", ListType(VoteType), resolve = c => votesFetcher.deferRelSeq(voteByLinkRel, c.value.id))
     )
   )
 
@@ -49,16 +53,25 @@ object GraphQLSchema {
     Interfaces(IdentifiableType),
     ReplaceField("createdAt", Field("createdAt", GraphQLDateTime, resolve = _.value.createdAt)),
     AddFields(
-      Field("links", ListType(LinkType), resolve = c => linksFetcher.deferRelSeq(linkByUserRel, c.value.id))
+      Field("links", ListType(LinkType), resolve = c => linksFetcher.deferRelSeq(linkByUserRel, c.value.id)),
+      Field("votes", ListType(VoteType), resolve = c => votesFetcher.deferRelSeq(votesByUserRel, c.value.id))
     )
   )
 
   val VoteType: ObjectType[Unit, Vote] = deriveObjectType[Unit, Vote](
     Interfaces(IdentifiableType),
-    ReplaceField("createdAt", Field("createdAt", GraphQLDateTime, resolve = _.value.createdAt))
+    ReplaceField("createdAt", Field("createdAt", GraphQLDateTime, resolve = _.value.createdAt)),
+    ExcludeFields("userId", "linkId"),
+    AddFields(
+      Field("user", UserType, resolve = c => usersFetcher.defer(c.value.userId)),
+      Field("link", LinkType, resolve = c => linksFetcher.defer(c.value.linkId))
+    )
   )
 
   val linkByUserRel = Relation[Link, Int]("byUser", l => Seq(l.postedBy))
+  val votesByUserRel = Relation[Vote, Int]("byUser", v => Seq(v.userId))
+  val voteByLinkRel = Relation[Vote, Int]("byLink", v => Seq(v.linkId))
+
 
   val linksFetcher = Fetcher.rel(
     (ctx: Context, ids: Seq[Int]) => ctx.dao.getLinks(ids),
@@ -69,8 +82,9 @@ object GraphQLSchema {
     (ctx: Context, ids: Seq[Int]) => ctx.dao.getUsers(ids)
   )
 
-  val votesFetcher = Fetcher(
-    (ctx: Context, ids: Seq[Int]) => ctx.dao.getVotes(ids)
+  val votesFetcher = Fetcher.rel(
+    (ctx: Context, ids: Seq[Int]) => ctx.dao.getVotes(ids),
+    (ctx: Context, ids: RelationIds[Vote]) => ctx.dao.getVotesByRelationsId(ids)
   )
 
   val Resolver = DeferredResolver.fetchers(linksFetcher, usersFetcher, votesFetcher)
