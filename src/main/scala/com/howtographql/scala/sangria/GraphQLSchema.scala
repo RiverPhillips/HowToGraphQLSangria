@@ -3,12 +3,13 @@ package com.howtographql.scala.sangria
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 
-import com.howtographql.scala.sangria.models.{Identifiable, Link, LocalDateTimeCoerceViolation, User, Vote}
+import com.howtographql.scala.sangria.models._
 import sangria.ast.StringValue
 import sangria.execution.deferred.{DeferredResolver, Fetcher, Relation, RelationIds}
-import sangria.macros.derive
 import sangria.macros.derive._
 import sangria.schema.{Field, IntType, ObjectType, _}
+import sangria.marshalling.sprayJson._
+import spray.json.DefaultJsonProtocol._
 
 import scala.util.{Success, Try}
 
@@ -31,12 +32,21 @@ object GraphQLSchema {
     }
   )
 
+  implicit val authProviderEmailFormat = jsonFormat2(AuthProviderEmail)
+  implicit val authProviderSignupDataFormat = jsonFormat1(AuthProviderSignupData)
+
   val IdentifiableType = InterfaceType(
     "Identifiable",
     fields[Unit, Identifiable](
       Field("id", IntType, resolve = _.value.id)
     )
   )
+
+  implicit val AuthProviderEmailInputType: InputObjectType[AuthProviderEmail] = deriveInputObjectType[AuthProviderEmail](
+    InputObjectTypeName("AUTH_PROVIDER_EMAIL")
+  )
+
+  lazy val AuthProviderSignupDataInputType: InputObjectType[AuthProviderSignupData] = deriveInputObjectType[AuthProviderSignupData]()
 
   lazy val LinkType : ObjectType[Unit, Link] = deriveObjectType[Unit, Link](
     Interfaces(IdentifiableType),
@@ -92,6 +102,36 @@ object GraphQLSchema {
 
   val Id = Argument("id", IntType)
   val Ids = Argument("ids", ListInputType(IntType))
+  val NameArg = Argument("name", StringType)
+  val AuthProviderArg = Argument("authProvider", AuthProviderSignupDataInputType)
+
+  val UrlArg = Argument("url", StringType)
+  val DescriptionArg = Argument("description", StringType)
+  val PostedByIdArg = Argument("postedById", IntType)
+
+  val UserId = Argument("userId", IntType)
+  val LinkId = Argument("linkId", IntType)
+
+  val Mutation = ObjectType(
+    "Mutation",
+    fields[Context, Unit](
+      Field("createUser",
+        UserType,
+        arguments = NameArg :: AuthProviderArg :: Nil,
+        resolve = c => c.ctx.dao.createUser(c.arg(NameArg), c.arg(AuthProviderArg))
+      ),
+      Field("createLink",
+        LinkType,
+        arguments = UrlArg :: DescriptionArg :: PostedByIdArg :: Nil,
+        resolve = c => c.ctx.dao.createLink(c.arg(UrlArg), c.arg(DescriptionArg), c.arg(PostedByIdArg))
+      ),
+      Field("createVote",
+        VoteType,
+        arguments = UserId :: LinkId  :: Nil,
+        resolve = c => c.ctx.dao.createVote(c.arg(UserId), c.arg(LinkId))
+      )
+    )
+  )
 
   val QueryType = ObjectType(
     "Query",
@@ -138,5 +178,5 @@ object GraphQLSchema {
     )
   )
 
-  val SchemaDefinition = Schema(QueryType)
+  val SchemaDefinition = Schema(QueryType, Some(Mutation))
 }

@@ -21,6 +21,10 @@ package object models {
 
   case class Vote(id: Int, userId: Int, linkId: Int, createdAt: LocalDateTime = LocalDateTime.now) extends Identifiable
 
+  case class AuthProviderEmail(email: String, password: String)
+
+  case class AuthProviderSignupData(email: AuthProviderEmail)
+
   case object LocalDateTimeCoerceViolation extends Violation {
     def errorMessage: String = "Error parsing DateTime"
   }
