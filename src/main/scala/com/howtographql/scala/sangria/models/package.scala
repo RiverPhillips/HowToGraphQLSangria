@@ -2,6 +2,7 @@ package com.howtographql.scala.sangria
 
 import java.time.LocalDateTime
 
+import sangria.execution.FieldTag
 import sangria.execution.deferred.HasId
 import sangria.validation.Violation
 
@@ -28,4 +29,10 @@ package object models {
   case object LocalDateTimeCoerceViolation extends Violation {
     def errorMessage: String = "Error parsing DateTime"
   }
+
+  case object Authorized extends FieldTag
+
+  case class AuthenticationException(message: String) extends Exception(message)
+
+  case class AuthorizationException(message: String) extends Exception(message)
 }

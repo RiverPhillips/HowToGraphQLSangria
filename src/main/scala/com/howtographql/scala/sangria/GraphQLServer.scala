@@ -5,6 +5,7 @@ import akka.http.scaladsl.marshalling.ToResponseMarshallable
 import akka.http.scaladsl.model.StatusCodes._
 import akka.http.scaladsl.server.Directives._
 import akka.http.scaladsl.server.Route
+import com.howtographql.scala.sangria.models.{AuthenticationException, AuthorizationException}
 import sangria.ast.Document
 import sangria.execution._
 import sangria.marshalling.sprayJson._
@@ -17,6 +18,11 @@ import scala.util.{Failure, Success}
 object GraphQLServer {
 
   private val dao = DBSchema.createDatabase
+
+  val ErrorHandler = ExceptionHandler {
+    case (_, AuthenticationException(message)) => HandledException(message)
+    case (_, AuthorizationException(message)) => HandledException(message)
+  }
 
   def endpoint(requestJson: JsValue)(implicit ec: ExecutionContext): Route = {
     val JsObject(fields) = requestJson
@@ -47,12 +53,14 @@ object GraphQLServer {
       Context(dao),
       variables = vars,
       operationName = operation,
-      deferredResolver = GraphQLSchema.Resolver
+      deferredResolver = GraphQLSchema.Resolver,
+      exceptionHandler = ErrorHandler,
+
+      middleware = AuthMiddleware :: Nil
     ).map(OK -> _)
       .recover {
         case error: QueryAnalysisError => BadRequest -> error.resolveError
         case error: ErrorWithResolver => InternalServerError -> error.resolveError
       }
   }
-
 }

@@ -8,6 +8,10 @@ import slick.jdbc.H2Profile.api._
 import scala.concurrent.Future
 
 class DAO(db: Database) {
+  def authenticate(email: String, password: String): Future[Option[User]] = db.run{
+    Users.filter(u => u.email === email && u.password === password).result.headOption
+  }
+
   def createUser(name: String, authProvider: AuthProviderSignupData): Future[User] = {
     val newUser = User(0, name, authProvider.email.email, authProvider.email.password)
 
